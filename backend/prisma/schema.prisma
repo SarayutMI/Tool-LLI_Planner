@@ -1,0 +1,200 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskPriority {
+  NONE
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum MemberRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  avatar    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  workspaces       WorkspaceMember[]
+  spaceMemberships SpaceMember[]
+  taskAssignments  TaskAssignee[]
+  comments         Comment[]
+  notifications    Notification[]
+  refreshTokens    RefreshToken[]
+  ownedWorkspaces  Workspace[]
+}
+
+model Workspace {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#0075ff")
+  icon      String?
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner   User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  members WorkspaceMember[]
+  spaces  Space[]
+  tags    Tag[]
+}
+
+model WorkspaceMember {
+  workspaceId String
+  userId      String
+  role        MemberRole @default(MEMBER)
+  createdAt   DateTime   @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([workspaceId, userId])
+}
+
+model Space {
+  id          String   @id @default(uuid())
+  name        String
+  color       String   @default("#0075ff")
+  icon        String?
+  workspaceId String
+  isPrivate   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members   SpaceMember[]
+  folders   Folder[]
+  lists     List[]
+}
+
+model SpaceMember {
+  spaceId String
+  userId  String
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([spaceId, userId])
+}
+
+model Folder {
+  id        String   @id @default(uuid())
+  name      String
+  color     String   @default("#0075ff")
+  spaceId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  space Space  @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  lists List[]
+}
+
+model List {
+  id           String   @id @default(uuid())
+  name         String
+  color        String   @default("#0075ff")
+  folderId     String?
+  spaceId      String
+  statusConfig Json     @default("[{\"name\":\"To Do\",\"color\":\"#94a3b8\"},{\"name\":\"In Progress\",\"color\":\"#3b82f6\"},{\"name\":\"Done\",\"color\":\"#22c55e\"}]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  folder Folder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
+  space  Space   @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  tasks  Task[]
+}
+
+model Task {
+  id           String       @id @default(uuid())
+  title        String
+  description  String?
+  status       String       @default("To Do")
+  priority     TaskPriority @default(NONE)
+  listId       String
+  parentTaskId String?
+  dueDate      DateTime?
+  startDate    DateTime?
+  order        Int          @default(0)
+  customFields Json?
+  tags         String[]     @default([])
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  list      List           @relation(fields: [listId], references: [id], onDelete: Cascade)
+  parent    Task?          @relation("Subtasks", fields: [parentTaskId], references: [id], onDelete: Cascade)
+  subtasks  Task[]         @relation("Subtasks")
+  assignees TaskAssignee[]
+  comments  Comment[]
+}
+
+model TaskAssignee {
+  taskId String
+  userId String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  taskId    String
+  authorId  String
+  parentId  String?
+  reactions Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task    Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author  User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  parent  Comment?  @relation("Replies", fields: [parentId], references: [id], onDelete: Cascade)
+  replies Comment[] @relation("Replies")
+}
+
+model Tag {
+  id          String @id @default(uuid())
+  name        String
+  color       String @default("#3b82f6")
+  workspaceId String
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String
+  message   String
+  isRead    Boolean  @default(false)
+  taskId    String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
